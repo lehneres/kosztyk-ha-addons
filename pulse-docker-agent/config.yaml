@@ -1,7 +1,7 @@
-name: "Pulse Docker Agent"
-slug: "pulse_docker_agent"
-version: "1.0.0"
-description: "Pulse Docker monitoring agent for the Home Assistant Docker engine"
+name: "Pulse PVE Monitoring"
+slug: "pulse_pve_monitoring"
+version: "1.0.1"
+description: "Pulse monitoring server (Proxmox + Docker) running as a Home Assistant add-on."
 url: "https://github.com/rcourtman/Pulse"
 
 arch:
@@ -9,23 +9,22 @@ arch:
   - aarch64
 
 startup: services
+boot: auto
 init: false
-docker_api: true
-host_network: true
+
 ingress: false
+host_network: false
+
+ports:
+  "7655/tcp": 7655
+ports_description:
+  "7655/tcp": "Pulse web UI & API"
+
+map:
+  - data:rw
 
 options:
-  pulse_url: ""
-  api_token: ""
-  interval: "30s"
   log_level: "info"
-  agent_version: "4.36.1"
-  extra_targets: ""
 
 schema:
-  pulse_url: str
-  api_token: str
-  interval: str
   log_level: list(info|debug|warn|error)
-  agent_version: str
-  extra_targets: str
