@@ -20,6 +20,8 @@ ports:
 ports_description:
   "7655/tcp": "Pulse web UI & API"
 
+webui: "http://[HOST]:[PORT:7655]/"  
+
 map:
   - data:rw
 
