@@ -1,0 +1,36 @@
+name: "ClamAV Daemon"
+version: "0.1.0"
+slug: "clamav_daemon"
+description: "ClamAV daemon (clamd) providing an antivirus TCP service on port 3310."
+url: "https://www.clamav.net/"
+
+arch:
+  - amd64
+  - aarch64
+
+startup: "services"
+boot: "auto"
+
+ports:
+  "3310/tcp": 3310
+ports_description:
+  "3310/tcp": "ClamAV daemon TCP port (clamd)"
+
+map:
+  - config:rw
+  - share:rw
+
+hassio_api: false
+homeassistant_api: false
+
+options:
+  listen_ip: "0.0.0.0"
+  listen_port: 3310
+  max_file_size_mb: 250
+  stream_max_length_mb: 250
+
+schema:
+  listen_ip: str
+  listen_port: int
+  max_file_size_mb: int
+  stream_max_length_mb: int
