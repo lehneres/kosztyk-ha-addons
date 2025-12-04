@@ -20,9 +20,9 @@ options:
   http_allowed: true
   tz: "Europe/Bucharest"
   auto_delete_hours: 720
-  clamav_url: "http://192.168.68.144:3000/api/v1/scan"
+  clamav_url: "http://172.0.0.1:3000/api/v1/scan"
   account_registration: true
-  allow_unauthenticated: false
+  allow_unauthenticated: true
 
 schema:
   jwt_secret: str
