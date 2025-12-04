@@ -3,8 +3,8 @@ set -e
 
 OPTIONS_FILE="/data/options.json"
 
-# Defaults – same as config.yaml (or ConvertX defaults)
-JWT_SECRET_DEFAULT="1FloareA1"
+# Defaults – same as config.yaml
+JWT_SECRET_DEFAULT="CHANGE_ME_TO_LONG_RANDOM_STRING"
 HTTP_ALLOWED_DEFAULT="true"
 TZ_DEFAULT="Europe/Bucharest"
 AUTO_DELETE_DEFAULT="720"
@@ -47,7 +47,7 @@ export CLAMAV_URL="$CLAMAV_URL"
 export ACCOUNT_REGISTRATION="$ACCOUNT_REGISTRATION"
 export ALLOW_UNAUTHENTICATED="$ALLOW_UNAUTHENTICATED"
 
-echo "ConvertX add-on env:"
+echo "=== ConvertX add-on env ==="
 echo "  HTTP_ALLOWED=$HTTP_ALLOWED"
 echo "  ACCOUNT_REGISTRATION=$ACCOUNT_REGISTRATION"
 echo "  ALLOW_UNAUTHENTICATED=$ALLOW_UNAUTHENTICATED"
@@ -55,6 +55,15 @@ echo "  AUTO_DELETE_EVERY_N_HOURS=$AUTO_DELETE"
 echo "  CLAMAV_URL=$CLAMAV_URL"
 echo "  TZ=$TZ_VAL"
 echo "  JWT_SECRET length=${#JWT_SECRET}"
+echo "==========================="
 
-# Run the original CMD from the base image
-exec "$@"
+# Very important: call the *original* ConvertX docker-entrypoint
+# so the app behaves exactly like in your working Docker setup.
+if command -v docker-entrypoint.sh >/dev/null 2>&1; then
+  exec docker-entrypoint.sh "$@"
+elif [ -x /usr/local/bin/docker-entrypoint.sh ]; then
+  exec /usr/local/bin/docker-entrypoint.sh "$@"
+else
+  echo "ERROR: docker-entrypoint.sh not found, cannot start ConvertX" >&2
+  exit 1
+fi
