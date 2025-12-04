@@ -4,26 +4,36 @@ version: "user"
 description: "ConvertX file converter with ClamAV API integration"
 arch:
   - amd64
-  - aarch64
+
 startup: application
 boot: auto
+
+# Home Assistant will build an image from Dockerfile
+# and tag it like kosztyk/amd64-addon-convertx:0.2.0
+image: "kosztyk/convertx-user"
+
+# No ingress, we go direct via host:port (simplest & safest for auth)
+ingress: false
+
 ports:
   "3000/tcp": 8080
 ports_description:
-  "3000/tcp": "ConvertX Web UI"
+  "3000/tcp": "ConvertX Web UI (mapped to 8080)"
+
 webui: "http://[HOST]:[PORT:3000]/"
-# Use your own registry naming convention here if you want
-image: "kosztyk/convertx-clamav"
+
+# Use /data as persistent storage and point ConvertX to it via symlink
+# (we handle the /app/data ↔ /data mapping in Dockerfile)
+# /data is always available to add-ons, no explicit map needed.
 
 options:
-  jwt_secret: "xxxxxxx"
+  jwt_secret: "CHANGE_ME_TO_LONG_RANDOM_STRING"
   http_allowed: true
   tz: "Europe/Bucharest"
   auto_delete_hours: 720
   clamav_url: "http://172.0.0.1:3000/api/v1/scan"
   account_registration: true
   allow_unauthenticated: true
-
 schema:
   jwt_secret: str
   http_allowed: bool
@@ -32,4 +42,3 @@ schema:
   clamav_url: str
   account_registration: bool
   allow_unauthenticated: bool
-
