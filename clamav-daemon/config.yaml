@@ -1,12 +1,11 @@
 name: "ClamAV Daemon"
-version: "0.1.0"
+version: "0.1.1"
 slug: "clamav_daemon"
-description: "ClamAV daemon (clamd) providing an antivirus TCP service on port 3310."
+description: "ClamAV daemon (clamd) TCP service on port 3310."
 url: "https://www.clamav.net/"
 
 arch:
   - amd64
-  - aarch64
 
 startup: "services"
 boot: "auto"
