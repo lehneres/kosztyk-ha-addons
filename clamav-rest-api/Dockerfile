@@ -1,42 +1,21 @@
-#!/usr/bin/env bash
-set -e
+FROM benzino77/clamav-rest-api:latest
 
-echo "[clamav-rest-api addon] Starting wrapper..."
+# Switch to root so we can install tools
+USER root
 
-CONFIG_FILE="/data/options.json"
+# We need bash & jq to read /data/options.json from HA
+RUN apk add --no-cache bash jq
 
-CLAMD_IP_DEFAULT="192.168.68.73"
-CLAMD_PORT_DEFAULT=3310
-APP_FORM_KEY_DEFAULT="FILES"
-APP_MAX_FILE_SIZE_DEFAULT=262144000
+# Copy our wrapper script to a safe path
+COPY run.sh /usr/local/bin/clamav-addon-run.sh
 
-if [ -f "$CONFIG_FILE" ]; then
-  echo "[clamav-rest-api addon] Reading options from ${CONFIG_FILE}"
-  CLAMD_IP=$(jq -r '.clamd_ip // empty' "$CONFIG_FILE")
-  CLAMD_PORT=$(jq -r '.clamd_port // empty' "$CONFIG_FILE")
-  APP_FORM_KEY=$(jq -r '.app_form_key // empty' "$CONFIG_FILE")
-  APP_MAX_FILE_SIZE=$(jq -r '.app_max_file_size // empty' "$CONFIG_FILE")
-else
-  echo "[clamav-rest-api addon] WARNING: ${CONFIG_FILE} not found, using defaults."
-fi
+# Back to the original non-root user of the base image
+USER node
 
-# Fallbacks to defaults if any option is missing
-CLAMD_IP="${CLAMD_IP:-$CLAMD_IP_DEFAULT}"
-CLAMD_PORT="${CLAMD_PORT:-$CLAMD_PORT_DEFAULT}"
-APP_FORM_KEY="${APP_FORM_KEY:-$APP_FORM_KEY_DEFAULT}"
-APP_MAX_FILE_SIZE="${APP_MAX_FILE_SIZE:-$APP_MAX_FILE_SIZE_DEFAULT}"
+# Upstream app lives here
+WORKDIR /clamav-rest-api
 
-export CLAMD_IP
-export CLAMD_PORT
-export APP_FORM_KEY
-export APP_MAX_FILE_SIZE
+EXPOSE 3000
 
-echo "[clamav-rest-api addon] Using CLAMD_IP=${CLAMD_IP}, CLAMD_PORT=${CLAMD_PORT}"
-echo "[clamav-rest-api addon] APP_FORM_KEY=${APP_FORM_KEY}, APP_MAX_FILE_SIZE=${APP_MAX_FILE_SIZE}"
-echo "[clamav-rest-api addon] NODE_ENV=${NODE_ENV:-production}, APP_PORT=${APP_PORT:-3000}"
-
-# Start the original app. In the upstream image, npm start is run from /clamav-rest-api
-cd /clamav-rest-api 2>/dev/null || cd /app 2>/dev/null || cd /
-
-echo "[clamav-rest-api addon] Running: npm start"
-npm start
+# Run our wrapper via bash (no need for chmod on the script)
+CMD ["bash", "/usr/local/bin/clamav-addon-run.sh"]
