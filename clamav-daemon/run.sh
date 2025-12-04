@@ -83,11 +83,24 @@ else
 fi
 
 # If there is still no DB at all, abort with clear error
-if ! ls /var/lib/clamav/*.cvd /var/lib/clamav/*.cld >/dev/null 2>&1; then
+# If there is still no DB at all, abort with clear error
+HAS_CVD=false
+HAS_CLD=false
+
+if ls /var/lib/clamav/*.cvd >/dev/null 2>&1; then
+  HAS_CVD=true
+fi
+
+if ls /var/lib/clamav/*.cld >/dev/null 2>&1; then
+  HAS_CLD=true
+fi
+
+if [ "$HAS_CVD" = false ] && [ "$HAS_CLD" = false ]; then
   log "ERROR: No ClamAV database files found in /var/lib/clamav after freshclam!"
   log "       clamd cannot start without at least main.cvd. Check network/ DNS and try again."
   exit 1
 fi
+
 
 # --------------------------- start clamd ----------------------------
 log "Starting clamd on ${LISTEN_IP}:${LISTEN_PORT}"
