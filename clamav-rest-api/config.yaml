@@ -1,5 +1,5 @@
 name: "ClamAV REST API"
-version: "0.1.1"  # bump this to force HA to see a new version
+version: "0.1.2"  # bump this to force HA to see a new version
 slug: "clamav_rest_api"
 description: "REST API that scans files using a remote ClamAV daemon (clamd)."
 url: "https://github.com/benzino77/clamav-rest-api"
