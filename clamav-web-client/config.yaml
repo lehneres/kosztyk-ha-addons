@@ -1,6 +1,6 @@
 name: "ClamAV Web Client"
 slug: "clamav_web_client"
-version: "0.2.0"
+version: "latest"
 description: "Web UI client for ClamAV, connecting to an existing clamd service."
 url: "https://hub.docker.com/r/rguziy/clamav-web-client"
 
