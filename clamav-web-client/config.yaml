@@ -1,38 +1,31 @@
 name: "ClamAV Web Client"
 slug: "clamav_web_client"
-version: "0.1.0"
+version: "0.1.2"  # bump so Supervisor rebuilds
 description: "Web UI client for ClamAV, connecting to an existing clamd service."
 url: "https://hub.docker.com/r/rguziy/clamav-web-client"
 
-# Architectures supported by the image
 arch:
   - amd64
-  - aarch64
-
-# Use the upstream image directly (no local build)
-image: "rguziy/clamav-web-client:latest"
 
 startup: "services"
 boot: "auto"
 
-# Web UI exposed by the container on port 8080
+# Container listens on 8080, we expose it as 8082 on the host
 webui: "http://[HOST]:[PORT:8080]/"
 
-# Port mapping: container 8080 → host 8082 (like your compose)
 ports:
   "8080/tcp": 8082
 ports_description:
-  "8080/tcp": "Web UI (HTTP)"
+  "8080/tcp": "ClamAV Web Client UI"
 
-# No HA APIs needed
 hassio_api: false
 homeassistant_api: false
 
-# Static environment for clamd connection (like your docker-compose)
+# Static environment for your clamd (same as docker-compose)
 environment:
   CLAMAV_HOST: "192.168.68.73"
   CLAMAV_PORT: "3310"
 
-# No user options for now – uses the above host/port
+# No user config for now
 options: {}
 schema: {}
