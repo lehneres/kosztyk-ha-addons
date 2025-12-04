@@ -37,7 +37,13 @@ log "MaxFileSize=${MAX_FILE_SIZE_MB}M, StreamMaxLength=${STREAM_MAX_LENGTH_MB}M"
 
 # --------------------------- Prep dirs ------------------------------
 mkdir -p /var/lib/clamav /var/log/clamav /run/clamav
-chown -R root:root /var/lib/clamav /var/log/clamav /run/clamav
+
+# Own everything by the clamav user (UID 100 / GID 101 on Alpine)
+if id clamav >/dev/null 2>&1; then
+  chown -R clamav:clamav /var/lib/clamav /var/log/clamav /run/clamav
+else
+  log "WARNING: user 'clamav' not found, leaving ownership as root"
+fi
 
 # --------------------------- clamd.conf -----------------------------
 log "Writing /etc/clamav/clamd.conf"
@@ -51,7 +57,7 @@ DatabaseDirectory /var/lib/clamav
 TCPSocket ${LISTEN_PORT}
 TCPAddr ${LISTEN_IP}
 
-User root
+User clamav
 
 ScanMail no
 ScanArchive yes
@@ -63,10 +69,32 @@ EOF
 
 # --------------------------- freshclam ------------------------------
 log "Updating ClamAV database with freshclam (may be rate-limited)..."
-if ! freshclam; then
-  log "WARNING: freshclam failed (possibly rate-limited). Using existing DB if present."
+
+if id clamav >/dev/null 2>&1; then
+  # run freshclam as clamav user so UID/GID match expectations
+  if ! su clamav -s /bin/sh -c "freshclam"; then
+    log "WARNING: freshclam failed (possibly rate-limited). Using existing DB if present."
+  fi
+else
+  # fallback: run as root (not ideal, but just in case)
+  if ! freshclam; then
+    log "WARNING: freshclam failed (possibly rate-limited). Using existing DB if present."
+  fi
+fi
+
+# If there is still no DB at all, abort with clear error
+if ! ls /var/lib/clamav/*.cvd /var/lib/clamav/*.cld >/dev/null 2>&1; then
+  log "ERROR: No ClamAV database files found in /var/lib/clamav after freshclam!"
+  log "       clamd cannot start without at least main.cvd. Check network/ DNS and try again."
+  exit 1
 fi
 
 # --------------------------- start clamd ----------------------------
 log "Starting clamd on ${LISTEN_IP}:${LISTEN_PORT}"
-exec clamd -c /etc/clamav/clamd.conf
+
+if id clamav >/dev/null 2>&1; then
+  exec su clamav -s /bin/sh -c "clamd -c /etc/clamav/clamd.conf"
+else
+  log "WARNING: user 'clamav' not found, starting clamd as root"
+  exec clamd -c /etc/clamav/clamd.conf
+fi
