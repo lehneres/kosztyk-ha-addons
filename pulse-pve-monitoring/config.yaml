@@ -23,8 +23,8 @@ ports_description:
 map:
   - data:rw
 
-options:
-  log_level: "info"
+# IMPORTANT: image name without tag; Supervisor handles tagging itself.
+image: "rcourtman/pulse"
 
-schema:
-  log_level: list(info|debug|warn|error)
+options: {}
+schema: {}
