@@ -18,7 +18,7 @@
   "map": ["data:rw"],
   "options": {
     "jwt_secret": "",
-    "account_registration": false,
+    "account_registration": true,
     "http_allowed": false,
     "allow_unauthenticated": false,
     "auto_delete_hours": 24,
@@ -29,7 +29,8 @@
     "unauthenticated_user_sharing": false,
     "max_convert_process": 0,
     "clamav_url": "http://172.0.0.1:3000/api/v1/scan",
-    "tz": "Europe/Bucharest"
+    "tz": "Europe/Bucharest",
+    "NODE_ENV": "production"
   },
   "schema": {
     "jwt_secret": "str?",
