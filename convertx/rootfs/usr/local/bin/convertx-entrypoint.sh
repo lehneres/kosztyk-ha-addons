@@ -1,82 +1,107 @@
 #!/bin/sh
 set -e
 
-# With map: type: data path: /app/data
-# the persistent HA data dir (and options.json) are now under /app/data
 OPTIONS_FILE="/app/data/options.json"
 DATA_DIR="/app/data"
+CONFIG_DIR="/app/data/config"
 
-# Make sure /app/data exists (Supervisor mounts it, but just in case)
-mkdir -p "${DATA_DIR}"
+# Ensure directories exist
+mkdir -p "${DATA_DIR}" "${CONFIG_DIR}"
 
-# Try to ensure ConvertX can write its DB here
-# If chown fails (wrong UID), fall back to chmod 777
-chown -R 1000:1000 "${DATA_DIR}" 2>/dev/null || chmod -R 777 "${DATA_DIR}" || true
+# Set permissions (fallback to 777 if chown fails)
+chown -R 1000:1000 "${DATA_DIR}" 2>/dev/null || chmod -R 777 "${DATA_DIR}" 2>/dev/null || true
 
-# Defaults – only used if GUI options are empty
+# Default values
 HTTP_ALLOWED_DEFAULT="true"
 TZ_DEFAULT="Europe/Bucharest"
 AUTO_DELETE_DEFAULT="720"
 CLAMAV_URL_DEFAULT="http://172.0.0.1:3000/api/v1/scan"
 ACCOUNT_REGISTRATION_DEFAULT="true"
 ALLOW_UNAUTHENTICATED_DEFAULT="true"
+PORT_DEFAULT="3000"
 
-JWT_SECRET=""
-HTTP_ALLOWED=""
-TZ_VAL=""
-AUTO_DELETE=""
-CLAMAV_URL=""
-ACCOUNT_REGISTRATION=""
-ALLOW_UNAUTHENTICATED=""
-
-# Read options from HA's options.json if present
+# Read Home Assistant options
 if [ -f "$OPTIONS_FILE" ] && command -v jq >/dev/null 2>&1; then
-  JWT_SECRET="$(jq -r '.jwt_secret // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
-  HTTP_ALLOWED="$(jq -r '.http_allowed // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
-  TZ_VAL="$(jq -r '.tz // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
-  AUTO_DELETE="$(jq -r '.auto_delete_hours // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
-  CLAMAV_URL="$(jq -r '.clamav_url // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
-  ACCOUNT_REGISTRATION="$(jq -r '.account_registration // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
-  ALLOW_UNAUTHENTICATED="$(jq -r '.allow_unauthenticated // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
+  JWT_SECRET=$(jq -r '.jwt_secret // empty' "$OPTIONS_FILE" 2>/dev/null || echo "")
+  HTTP_ALLOWED=$(jq -r '.http_allowed // empty' "$OPTIONS_FILE" 2>/dev/null || echo "$HTTP_ALLOWED_DEFAULT")
+  TZ_VAL=$(jq -r '.tz // empty' "$OPTIONS_FILE" 2>/dev/null || echo "$TZ_DEFAULT")
+  AUTO_DELETE=$(jq -r '.auto_delete_hours // empty' "$OPTIONS_FILE" 2>/dev/null || echo "$AUTO_DELETE_DEFAULT")
+  CLAMAV_URL=$(jq -r '.clamav_url // empty' "$OPTIONS_FILE" 2>/dev/null || echo "$CLAMAV_URL_DEFAULT")
+  ACCOUNT_REGISTRATION=$(jq -r '.account_registration // empty' "$OPTIONS_FILE" 2>/dev/null || echo "$ACCOUNT_REGISTRATION_DEFAULT")
+  ALLOW_UNAUTHENTICATED=$(jq -r '.allow_unauthenticated // empty' "$OPTIONS_FILE" 2>/dev/null || echo "$ALLOW_UNAUTHENTICATED_DEFAULT")
+else
+  # Use defaults if options.json doesn't exist
+  JWT_SECRET=""
+  HTTP_ALLOWED="$HTTP_ALLOWED_DEFAULT"
+  TZ_VAL="$TZ_DEFAULT"
+  AUTO_DELETE="$AUTO_DELETE_DEFAULT"
+  CLAMAV_URL="$CLAMAV_URL_DEFAULT"
+  ACCOUNT_REGISTRATION="$ACCOUNT_REGISTRATION_DEFAULT"
+  ALLOW_UNAUTHENTICATED="$ALLOW_UNAUTHENTICATED_DEFAULT"
 fi
 
-# Apply defaults if empty
-[ -z "$HTTP_ALLOWED" ] && HTTP_ALLOWED="$HTTP_ALLOWED_DEFAULT"
-[ -z "$TZ_VAL" ] && TZ_VAL="$TZ_DEFAULT"
-[ -z "$AUTO_DELETE" ] && AUTO_DELETE="$AUTO_DELETE_DEFAULT"
-[ -z "$CLAMAV_URL" ] && CLAMAV_URL="$CLAMAV_URL_DEFAULT"
-[ -z "$ACCOUNT_REGISTRATION" ] && ACCOUNT_REGISTRATION="$ACCOUNT_REGISTRATION_DEFAULT"
-[ -z "$ALLOW_UNAUTHENTICATED" ] && ALLOW_UNAUTHENTICATED="$ALLOW_UNAUTHENTICATED_DEFAULT"
-
-# JWT_SECRET can remain empty -> ConvertX will use randomUUID()
-# If you want to force it, set it in the GUI.
-
+# Export environment variables
+# Note: ConvertX might use different variable names - check the source code
 export JWT_SECRET="$JWT_SECRET"
-export HTTP_ALLOWED="$HTTP_ALLOWED"
+export NODE_ENV="production"
+export PORT="$PORT_DEFAULT"
 export TZ="$TZ_VAL"
+
+# These are specific to ConvertX's configuration
+export CONVERTX_HTTP_ALLOWED="$HTTP_ALLOWED"
+export CONVERTX_AUTO_DELETE_HOURS="$AUTO_DELETE"
+export CONVERTX_CLAMAV_URL="$CLAMAV_URL"
+export CONVERTX_ACCOUNT_REGISTRATION="$ACCOUNT_REGISTRATION"
+export CONVERTX_ALLOW_UNAUTHENTICATED="$ALLOW_UNAUTHENTICATED"
+
+# Also set as generic variables (some apps check both)
+export HTTP_ALLOWED="$HTTP_ALLOWED"
 export AUTO_DELETE_EVERY_N_HOURS="$AUTO_DELETE"
 export CLAMAV_URL="$CLAMAV_URL"
 export ACCOUNT_REGISTRATION="$ACCOUNT_REGISTRATION"
 export ALLOW_UNAUTHENTICATED="$ALLOW_UNAUTHENTICATED"
 
-echo "=== ConvertX add-on env ==="
-echo "  HTTP_ALLOWED=$HTTP_ALLOWED"
-echo "  ACCOUNT_REGISTRATION=$ACCOUNT_REGISTRATION"
-echo "  ALLOW_UNAUTHENTICATED=$ALLOW_UNAUTHENTICATED"
-echo "  AUTO_DELETE_EVERY_N_HOURS=$AUTO_DELETE"
-echo "  CLAMAV_URL=$CLAMAV_URL"
-echo "  TZ=$TZ_VAL"
-echo "  JWT_SECRET set? $( [ -n "$JWT_SECRET" ] && echo yes || echo no )"
-echo "  DATA_DIR=$DATA_DIR"
-ls -ld "$DATA_DIR" || true
-echo "==========================="
+echo "=== ConvertX Add-on Configuration ==="
+echo "Data Directory: $DATA_DIR"
+echo "Config Directory: $CONFIG_DIR"
+echo "HTTP Allowed: $HTTP_ALLOWED"
+echo "Account Registration: $ACCOUNT_REGISTRATION"
+echo "Allow Unauthenticated: $ALLOW_UNAUTHENTICATED"
+echo "Auto Delete Hours: $AUTO_DELETE"
+echo "ClamAV URL: $CLAMAV_URL"
+echo "Timezone: $TZ_VAL"
+echo "JWT Secret set: $( [ -n "$JWT_SECRET" ] && echo "Yes" || echo "No - using random" )"
+echo "======================================"
 
-# Call the original ConvertX entrypoint so behaviour matches plain Docker
+# Check if this is the first run
+FIRST_RUN_FILE="$DATA_DIR/.first-run"
+if [ ! -f "$FIRST_RUN_FILE" ]; then
+  echo "First run detected - initializing ConvertX..."
+  touch "$FIRST_RUN_FILE"
+  
+  # If you're having authentication issues, you might need to:
+  # 1. Check ConvertX's default credentials
+  # 2. Or enable account registration initially
+  echo "Tip: If you can't login, try:"
+  echo "1. Enable 'account_registration' in add-on options"
+  echo "2. Create an account via the web UI"
+  echo "3. Then disable registration if desired"
+fi
+
+# Call the original entrypoint
 if command -v docker-entrypoint.sh >/dev/null 2>&1; then
   exec docker-entrypoint.sh "$@"
 elif [ -x /usr/local/bin/docker-entrypoint.sh ]; then
   exec /usr/local/bin/docker-entrypoint.sh "$@"
+elif [ -f /app/docker-entrypoint.sh ]; then
+  exec /app/docker-entrypoint.sh "$@"
 else
-  echo "ERROR: docker-entrypoint.sh not found, cannot start ConvertX" >&2
-  exit 1
+  echo "WARNING: Could not find original entrypoint, starting directly..."
+  # Try to start the application directly
+  if [ -f /app/package.json ]; then
+    cd /app && exec npm start
+  else
+    echo "ERROR: Cannot start ConvertX - no entrypoint found" >&2
+    exit 1
+  fi
 fi
