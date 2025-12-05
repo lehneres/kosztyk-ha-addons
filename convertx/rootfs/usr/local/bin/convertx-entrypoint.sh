@@ -1,33 +1,25 @@
 #!/bin/sh
 set -e
 
-OPTIONS_FILE="/data/options.json"
+# With map: type: data path: /app/data
+# the persistent HA data dir (and options.json) are now under /app/data
+OPTIONS_FILE="/app/data/options.json"
+DATA_DIR="/app/data"
 
-# Make sure /data exists and /app/data points to it (persistent storage)
-mkdir -p /data
-if [ ! -L /app/data ]; then
-  # If /app/data exists as a dir or file, remove it and replace with symlink
-  if [ -d /app/data ] || [ -f /app/data ]; then
-    rm -rf /app/data
-  fi
-  ln -s /data /app/data
-fi
+# Make sure /app/data exists (Supervisor mounts it, but just in case)
+mkdir -p "${DATA_DIR}"
 
-# Try to fix permissions so ConvertX can write its SQLite DB
-# (equivalent to "chown -R $USER:$USER path" from README)
-# We don't know the exact user ConvertX runs as, so:
-#  - first try chown to a common non-root UID (1000)
-#  - if that fails, fall back to chmod 777 (this is a homelab-only box anyway)
-chown -R 1000:1000 /data 2>/dev/null || chmod -R 777 /data || true
+# Try to ensure ConvertX can write its DB here
+# If chown fails (wrong UID), fall back to chmod 777
+chown -R 1000:1000 "${DATA_DIR}" 2>/dev/null || chmod -R 777 "${DATA_DIR}" || true
 
-# Defaults – same as in config.yaml
-JWT_SECRET_DEFAULT="CHANGE_ME_TO_LONG_RANDOM_STRING"
+# Defaults – only used if GUI options are empty
 HTTP_ALLOWED_DEFAULT="true"
 TZ_DEFAULT="Europe/Bucharest"
 AUTO_DELETE_DEFAULT="720"
-CLAMAV_URL_DEFAULT="http://192.168.68.144:3000/api/v1/scan"
+CLAMAV_URL_DEFAULT="http://172.0.0.1:3000/api/v1/scan"
 ACCOUNT_REGISTRATION_DEFAULT="true"
-ALLOW_UNAUTHENTICATED_DEFAULT="false"
+ALLOW_UNAUTHENTICATED_DEFAULT="true"
 
 JWT_SECRET=""
 HTTP_ALLOWED=""
@@ -37,7 +29,7 @@ CLAMAV_URL=""
 ACCOUNT_REGISTRATION=""
 ALLOW_UNAUTHENTICATED=""
 
-# Read options from HA's /data/options.json if jq is available
+# Read options from HA's options.json if present
 if [ -f "$OPTIONS_FILE" ] && command -v jq >/dev/null 2>&1; then
   JWT_SECRET="$(jq -r '.jwt_secret // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
   HTTP_ALLOWED="$(jq -r '.http_allowed // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
@@ -48,13 +40,16 @@ if [ -f "$OPTIONS_FILE" ] && command -v jq >/dev/null 2>&1; then
   ALLOW_UNAUTHENTICATED="$(jq -r '.allow_unauthenticated // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
 fi
 
-[ -z "$JWT_SECRET" ] && JWT_SECRET="$JWT_SECRET_DEFAULT"
+# Apply defaults if empty
 [ -z "$HTTP_ALLOWED" ] && HTTP_ALLOWED="$HTTP_ALLOWED_DEFAULT"
 [ -z "$TZ_VAL" ] && TZ_VAL="$TZ_DEFAULT"
 [ -z "$AUTO_DELETE" ] && AUTO_DELETE="$AUTO_DELETE_DEFAULT"
 [ -z "$CLAMAV_URL" ] && CLAMAV_URL="$CLAMAV_URL_DEFAULT"
 [ -z "$ACCOUNT_REGISTRATION" ] && ACCOUNT_REGISTRATION="$ACCOUNT_REGISTRATION_DEFAULT"
 [ -z "$ALLOW_UNAUTHENTICATED" ] && ALLOW_UNAUTHENTICATED="$ALLOW_UNAUTHENTICATED_DEFAULT"
+
+# JWT_SECRET can remain empty -> ConvertX will use randomUUID()
+# If you want to force it, set it in the GUI.
 
 export JWT_SECRET="$JWT_SECRET"
 export HTTP_ALLOWED="$HTTP_ALLOWED"
@@ -71,12 +66,12 @@ echo "  ALLOW_UNAUTHENTICATED=$ALLOW_UNAUTHENTICATED"
 echo "  AUTO_DELETE_EVERY_N_HOURS=$AUTO_DELETE"
 echo "  CLAMAV_URL=$CLAMAV_URL"
 echo "  TZ=$TZ_VAL"
-echo "  JWT_SECRET length=${#JWT_SECRET}"
-echo "  /data permissions:"
-ls -ld /data || true
+echo "  JWT_SECRET set? $( [ -n "$JWT_SECRET" ] && echo yes || echo no )"
+echo "  DATA_DIR=$DATA_DIR"
+ls -ld "$DATA_DIR" || true
 echo "==========================="
 
-# Call the original ConvertX entrypoint, so behaviour matches your Docker setup
+# Call the original ConvertX entrypoint so behaviour matches plain Docker
 if command -v docker-entrypoint.sh >/dev/null 2>&1; then
   exec docker-entrypoint.sh "$@"
 elif [ -x /usr/local/bin/docker-entrypoint.sh ]; then
