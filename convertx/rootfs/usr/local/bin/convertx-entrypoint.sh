@@ -1,43 +1,45 @@
 #!/bin/sh
 set -e
 
-# Home Assistant add-on data directory
-DATA_DIR="/data"
+# Home Assistant add-on data directory - using your preferred location
+ADDON_DATA_DIR="/addons/convertx"
+DATA_DIR="${ADDON_DATA_DIR}/data"
+DB_DIR="${DATA_DIR}/db"
 OPTIONS_FILE="${DATA_DIR}/options.json"
 
-# Ensure data directory exists
-mkdir -p "${DATA_DIR}"
+# Ensure all directories exist
+mkdir -p "${ADDON_DATA_DIR}" "${DATA_DIR}" "${DB_DIR}"
 
-# Set ownership and permissions - CRITICAL for SQLite
-# Try to set ownership to node user (UID 1000 in Node.js alpine images)
-if [ -f /etc/passwd ] && grep -q "^node:" /etc/passwd; then
-    chown -R node:node "${DATA_DIR}" 2>/dev/null || true
-else
-    # Fallback to 1000:1000 (typical node user in Docker)
-    chown -R 1000:1000 "${DATA_DIR}" 2>/dev/null || true
-fi
+# CRITICAL: Set proper permissions for SQLite database
+# Home Assistant typically runs containers as root, but the app runs as node user
+echo "Setting permissions for data directories..."
 
-# Ensure write permissions
+# First, check current ownership
+echo "Current ownership of ${ADDON_DATA_DIR}:"
+ls -ld "${ADDON_DATA_DIR}" 2>/dev/null || echo "Cannot list ${ADDON_DATA_DIR}"
+
+# Try to set ownership to node user (UID 1000)
+# This is what the Node.js application expects
+chown -R 1000:1000 "${ADDON_DATA_DIR}" 2>/dev/null && echo "Changed ownership to 1000:1000" || echo "Ownership change failed, using permissions instead"
+
+# Ensure write permissions - this is critical for SQLite
 chmod -R 755 "${DATA_DIR}" 2>/dev/null || true
+chmod -R 777 "${DB_DIR}" 2>/dev/null || true
 chmod 777 "${DATA_DIR}" 2>/dev/null || true
-
-# Create the database directory specifically
-DB_DIR="${DATA_DIR}/db"
-mkdir -p "${DB_DIR}"
-chmod 777 "${DB_DIR}" 2>/dev/null || true
 
 # Default values
 JWT_SECRET_DEFAULT=""
-ACCOUNT_REGISTRATION_DEFAULT="true"  # Changed to true for first run
-HTTP_ALLOWED_DEFAULT="false"
+ACCOUNT_REGISTRATION_DEFAULT="true"  # Enable for first run
+HTTP_ALLOWED_DEFAULT="true"          # Allow HTTP in local network
 ALLOW_UNAUTHENTICATED_DEFAULT="false"
 AUTO_DELETE_EVERY_N_HOURS_DEFAULT="24"
 TZ_DEFAULT="Europe/Bucharest"
 CLAMAV_URL_DEFAULT=""
-DATABASE_URL_DEFAULT="file:${DB_DIR}/convertx.db"  # SQLite database path
+DATABASE_URL_DEFAULT="file:${DB_DIR}/convertx.db"
 
-# Read configuration from Home Assistant
+# Read configuration from Home Assistant options.json
 if [ -f "${OPTIONS_FILE}" ] && command -v jq >/dev/null 2>&1; then
+    echo "Reading configuration from ${OPTIONS_FILE}"
     JWT_SECRET=$(jq -r '.jwt_secret // empty' "${OPTIONS_FILE}")
     ACCOUNT_REGISTRATION=$(jq -r '.account_registration // "'"${ACCOUNT_REGISTRATION_DEFAULT}"'"' "${OPTIONS_FILE}")
     HTTP_ALLOWED=$(jq -r '.http_allowed // "'"${HTTP_ALLOWED_DEFAULT}"'"' "${OPTIONS_FILE}")
@@ -46,6 +48,7 @@ if [ -f "${OPTIONS_FILE}" ] && command -v jq >/dev/null 2>&1; then
     CLAMAV_URL=$(jq -r '.clamav_url // empty' "${OPTIONS_FILE}")
     TZ_VAL=$(jq -r '.tz // "'"${TZ_DEFAULT}"'"' "${OPTIONS_FILE}")
 else
+    echo "No options.json found, using defaults"
     # Use defaults
     JWT_SECRET="${JWT_SECRET_DEFAULT}"
     ACCOUNT_REGISTRATION="${ACCOUNT_REGISTRATION_DEFAULT}"
@@ -56,7 +59,7 @@ else
     TZ_VAL="${TZ_DEFAULT}"
 fi
 
-# Export environment variables
+# Export all environment variables ConvertX needs
 export JWT_SECRET="${JWT_SECRET}"
 export ACCOUNT_REGISTRATION="${ACCOUNT_REGISTRATION}"
 export HTTP_ALLOWED="${HTTP_ALLOWED}"
@@ -66,92 +69,95 @@ export CLAMAV_URL="${CLAMAV_URL}"
 export TZ="${TZ_VAL}"
 export NODE_ENV="production"
 
-# ConvertX might need DATABASE_URL environment variable
-# Check ConvertX source to see if it uses this
+# Export database location
 export DATABASE_URL="${DATABASE_URL_DEFAULT}"
 
-# Create symbolic link for persistent data
-# This ensures the app sees /app/data but it's actually in /data
-if [ ! -L "/app/data" ]; then
-    if [ -d "/app/data" ]; then
-        # Backup existing data
-        mv "/app/data" "/app/data.bak"
-    fi
-    ln -sf "${DATA_DIR}" "/app/data"
+# Create symbolic links so ConvertX can find its data
+echo "Setting up symbolic links..."
+if [ -d "/app/data" ] && [ ! -L "/app/data" ]; then
+    echo "Backing up existing /app/data to /app/data.bak"
+    mv "/app/data" "/app/data.bak"
 fi
 
-# Also link the database directory
-if [ ! -L "/app/db" ]; then
-    ln -sf "${DB_DIR}" "/app/db"
-fi
+# Link the entire data directory
+ln -sf "${DATA_DIR}" "/app/data" 2>/dev/null || echo "Could not create symlink, continuing..."
 
-# Fix permissions on the database file if it exists
+# Link specifically to database directory
+ln -sf "${DB_DIR}" "/app/db" 2>/dev/null || echo "Could not create db symlink"
+
+# Handle the database file
 DB_FILE="${DB_DIR}/convertx.db"
-if [ -f "${DB_FILE}" ]; then
-    echo "Found existing database: ${DB_FILE}"
-    ls -la "${DB_FILE}"
-    chmod 666 "${DB_FILE}" 2>/dev/null || true
-else
-    echo "No existing database found. Will create: ${DB_FILE}"
-    # Ensure the directory is writable
-    touch "${DB_FILE}" 2>/dev/null || true
-    chmod 666 "${DB_FILE}" 2>/dev/null || true
-fi
+echo "Database location: ${DB_FILE}"
 
+# Ensure database file exists and has correct permissions
+touch "${DB_FILE}"
+chmod 666 "${DB_FILE}" 2>/dev/null || echo "Warning: Could not set permissions on ${DB_FILE}"
+chown 1000:1000 "${DB_FILE}" 2>/dev/null || echo "Warning: Could not change ownership of ${DB_FILE}"
+
+echo ""
 echo "=========================================="
-echo "ConvertX Configuration:"
+echo "ConvertX Configuration Summary"
 echo "=========================================="
+echo "Add-on Data Directory: ${ADDON_DATA_DIR}"
 echo "Data Directory: ${DATA_DIR}"
 echo "Database Directory: ${DB_DIR}"
 echo "Database File: ${DB_FILE}"
-echo "ACCOUNT_REGISTRATION: ${ACCOUNT_REGISTRATION}"
-echo "HTTP_ALLOWED: ${HTTP_ALLOWED}"
-echo "ALLOW_UNAUTHENTICATED: ${ALLOW_UNAUTHENTICATED}"
-echo "AUTO_DELETE_EVERY_N_HOURS: ${AUTO_DELETE_EVERY_N_HOURS}"
-echo "TIMEZONE: ${TZ_VAL}"
-echo "CLAMAV_URL: ${CLAMAV_URL:-'Not set'}"
-echo "JWT_SECRET: $(if [ -n "${JWT_SECRET}" ]; then echo "Set"; else echo "Using randomUUID()"; fi)"
+echo ""
+echo "Application Settings:"
+echo "  ACCOUNT_REGISTRATION: ${ACCOUNT_REGISTRATION}"
+echo "  HTTP_ALLOWED: ${HTTP_ALLOWED}"
+echo "  ALLOW_UNAUTHENTICATED: ${ALLOW_UNAUTHENTICATED}"
+echo "  AUTO_DELETE_EVERY_N_HOURS: ${AUTO_DELETE_EVERY_N_HOURS}"
+echo "  TIMEZONE: ${TZ_VAL}"
+echo "  CLAMAV_URL: ${CLAMAV_URL:-'Not set'}"
+echo "  JWT_SECRET: $(if [ -n "${JWT_SECRET}" ]; then echo "Custom value set"; else echo "Using randomUUID()"; fi)"
+echo ""
+echo "Permissions Check:"
+echo "  Data dir exists: $(if [ -d "${DATA_DIR}" ]; then echo "Yes"; else echo "No"; fi)"
+echo "  DB dir exists: $(if [ -d "${DB_DIR}" ]; then echo "Yes"; else echo "No"; fi)"
+echo "  DB file exists: $(if [ -f "${DB_FILE}" ]; then echo "Yes"; else echo "No"; fi)"
+echo "  DB file permissions: $(ls -la "${DB_FILE}" 2>/dev/null | awk '{print $1}' || echo "Cannot check")"
 echo "=========================================="
+echo ""
 
-# Check permissions
-echo ""
-echo "Directory Permissions:"
-ls -la "${DATA_DIR}/" 2>/dev/null || echo "Cannot list ${DATA_DIR}"
-echo ""
-if [ -f "${DB_FILE}" ]; then
-    echo "Database file permissions:"
-    ls -la "${DB_FILE}"
-fi
-echo ""
+# Check directory contents
+echo "Contents of ${DATA_DIR}:"
+ls -la "${DATA_DIR}/" 2>/dev/null || echo "Cannot list directory"
 
 # Important warning about authentication
 if [ "${ACCOUNT_REGISTRATION}" = "false" ]; then
-    echo "⚠️  WARNING: Account registration is disabled!"
-    echo "   If you don't have an existing account, you won't be able to login."
-    echo "   Set 'account_registration' to true in the add-on options to create an account first."
+    echo ""
+    echo "⚠️  IMPORTANT: Account registration is DISABLED!"
+    echo "   If this is your first time running ConvertX, you WON'T be able to login."
+    echo "   To fix this:"
+    echo "   1. Stop this add-on"
+    echo "   2. Edit add-on configuration"
+    echo "   3. Set 'account_registration' to true"
+    echo "   4. Save and start the add-on"
+    echo "   5. Create your account at http://[YOUR-HA-IP]:8080"
+    echo "   6. Then disable registration for security"
     echo ""
 fi
 
-# Check if we need to run database migrations
-# ConvertX might use Prisma or similar ORM
-if [ -f "/app/package.json" ]; then
-    cd /app
-    # Check if prisma is in package.json
-    if grep -q "prisma" package.json || [ -f "prisma/schema.prisma" ]; then
-        echo "Running database migrations..."
-        npx prisma migrate deploy 2>/dev/null || echo "No Prisma migrations found or failed"
-    fi
-    
-    # Check for any other migration commands
-    if [ -f "package.json" ] && grep -q '"migrate"' package.json; then
-        echo "Running custom migrations..."
-        npm run migrate 2>/dev/null || true
-    fi
+# Check if we need to initialize the database
+if [ ! -s "${DB_FILE}" ]; then
+    echo "Database file is empty or doesn't exist. ConvertX will initialize it on first run."
+    echo "If you have an existing database, copy it to: ${DB_FILE}"
+    echo "Then set permissions: chmod 666 ${DB_FILE}"
 fi
 
-echo "Starting ConvertX..."
+echo "Starting ConvertX application..."
 echo "=========================================="
 
 # Switch to node user and start the application
-# Using exec to properly handle signals
-exec su-exec node:node npm start
+# Using gosu or su-exec is better than su for Docker
+if command -v su-exec >/dev/null 2>&1; then
+    echo "Using su-exec to switch to node user"
+    exec su-exec node:node npm start
+elif command -v gosu >/dev/null 2>&1; then
+    echo "Using gosu to switch to node user"
+    exec gosu node npm start
+else
+    echo "Using su to switch to node user"
+    exec su node -c "npm start"
+fi
